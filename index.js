@@ -29,29 +29,33 @@ app.get("/notify/:groupId/:userId", async (req, res) => {
     const groupData = groupDoc.data();
     const members = groupData.members || [];
     const timeline = groupData.timeline || [];
+    const lastNotifications = groupData.lastNotifications || [];
 
     if (timeline.length === 0) {
       return res.status(400).json({ error: "No timeline entries found" });
     }
 
+    // 2. Check last notification time for userId in this group
+    const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
+    const now = Date.now();
+    const lastEntry = lastNotifications.find(entry => entry.userId === userId);
+    if (lastEntry && (now - lastEntry.timestamp < SIX_HOURS_MS)) {
+      return res.status(429).json({ error: "Notification already sent in the last 6 hours for this user in this group" });
+    }
 
     // 3. Collect FCM tokens
     const tokens = [];
     let title_string;
-    console.log(`userId: ${userId}`);
     for (const memberId of members) {
-        const userDoc = await db.collection("tainted-users").doc(memberId).get();
-        if (userDoc.exists) {
+      const userDoc = await db.collection("tainted-users").doc(memberId).get();
+      if (userDoc.exists) {
         const userData = userDoc.data();
-        if (memberId == userId){
-                title_string = `${userData.name}, is getting stronger!`;
-                continue; // Skip the user who triggered the notification
+        if (memberId == userId) {
+          title_string = `${userData.name}, is getting stronger!`;
+          continue; // Skip the user who triggered the notification
         }
-        console.log(title_string);
-        console.log(`Processing user: ${userData.name} (${memberId})`);
-        if (userData.fcm_token) { // Skip the user who triggered the notification
-            
-            tokens.push(userData.fcm_token);
+        if (userData.fcm_token) {
+          tokens.push(userData.fcm_token);
         }
       }
     }
@@ -69,8 +73,23 @@ app.get("/notify/:groupId/:userId", async (req, res) => {
       tokens: tokens,
     };
 
-    // Use sendEachForMulticast instead of sendMulticast
     const response = await fcm.sendEachForMulticast(message);
+
+    // 5. Update lastNotifications array in group
+    let updated = false;
+    const updatedLastNotifications = lastNotifications.map(entry => {
+      if (entry.userId === userId) {
+        updated = true;
+        return { userId, timestamp: now };
+      }
+      return entry;
+    });
+    if (!updated) {
+      updatedLastNotifications.push({ userId, timestamp: now });
+    }
+    await db.collection("tainted-groups").doc(groupId).update({
+      lastNotifications: updatedLastNotifications,
+    });
 
     res.json({
       success: true,
