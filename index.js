@@ -16,6 +16,9 @@ const db = admin.firestore();
 const fcm = admin.messaging();
 
 // API endpoint
+app.get('/', async (req, res) => {
+  res.send("Hello, this is the notification service.");
+});
 app.get("/notify/:groupId/:userId", async (req, res) => {
   const { groupId, userId } = req.params;
 
