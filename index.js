@@ -35,6 +35,45 @@ function getRandomImage() {
   // Return the public URL for the image
   return `https://tainted-backend.onrender.com/images/${randomFile}`;
 }
+console.log(getRandomImage());
+
+// Array of GenZ self-improvement messages
+const genzMessages = [
+  {
+    title: "Level Up Your Life!",
+    body: "Small wins every day add up to big changes. Keep going, you’re doing great!"
+  },
+  {
+    title: "Stay Consistent, Stay Winning!",
+    body: "Your future self will thank you for the effort you put in today. Don’t stop now!"
+  },
+  {
+    title: "You’re Building Your Best Self!",
+    body: "Growth isn’t always loud. Sometimes it’s just you, quietly crushing your goals."
+  },
+  {
+    title: "Keep That Streak Alive!",
+    body: "Habits shape your destiny. One step at a time, you’re getting closer."
+  },
+  {
+    title: "Progress Over Perfection!",
+    body: "It’s okay to be a work in progress. What matters is you’re moving forward."
+  },
+  {
+    title: "Your Grind Inspires Others!",
+    body: "Every action you take is a vote for the person you want to become."
+  },
+  {
+    title: "Glow Up In Progress!",
+    body: "You’re not just changing habits, you’re changing your life. Keep shining!"
+  }
+];
+
+// Utility to pick a random GenZ message
+function getRandomGenZMessage() {
+  return genzMessages[Math.floor(Math.random() * genzMessages.length)];
+}
+
 // API endpoint
 app.get('/', async (req, res) => {
   res.send("Hello, this is the notification service.");
@@ -150,10 +189,11 @@ app.get("/notify-all", async (req, res) => {
     for (let i = 0; i < tokens.length; i += chunkSize) {
       const chunk = tokens.slice(i, i + chunkSize);
       const randomGif = getRandomImage();
+      const randomMessage = getRandomGenZMessage();
       const message = {
         notification: {
-          title: "Get back on track with your habits!",
-          body: "Consistency is key. Never undermine the power of small daily actions.",
+          title: randomMessage.title,
+          body: randomMessage.body,
           image: randomGif
         },
         tokens: chunk.map(t => t.token),
