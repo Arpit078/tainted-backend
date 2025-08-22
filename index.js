@@ -1,6 +1,8 @@
 // server.js
 const express = require("express");
 const admin = require("firebase-admin");
+const path = require("path");
+const fs = require("fs");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -15,6 +17,24 @@ admin.initializeApp({
 const db = admin.firestore();
 const fcm = admin.messaging();
 
+// Serve static images from the "public" folder
+app.use('/images', express.static(path.join(__dirname, 'public')));
+
+// Example array of gif URLs (replace with your own)
+const gifUrls = [
+];
+
+// Utility to pick a random image from the public folder
+function getRandomImage() {
+  const publicDir = path.join(__dirname, "public");
+  const files = fs.readdirSync(publicDir).filter(file =>
+    /\.(gif|jpg|jpeg|png)$/i.test(file)
+  );
+  if (files.length === 0) return null;
+  const randomFile = files[Math.floor(Math.random() * files.length)];
+  // Return the public URL for the image
+  return `https://tainted-backend.onrender.com/images/${randomFile}`;
+}
 // API endpoint
 app.get('/', async (req, res) => {
   res.send("Hello, this is the notification service.");
@@ -102,6 +122,65 @@ app.get("/notify/:groupId/:userId", async (req, res) => {
 
   } catch (error) {
     console.error("Error sending notification:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Send notification to all users with fcm_token
+app.get("/notify-all", async (req, res) => {
+  try {
+    const usersSnapshot = await db.collection("tainted-users").get();
+    const tokens = [];
+    const failedUsers = [];
+
+    usersSnapshot.forEach(doc => {
+      const user = doc.data();
+      if (user.fcm_token) {
+        tokens.push({ token: user.fcm_token, userId: doc.id });
+      }
+    });
+
+    if (tokens.length === 0) {
+      return res.status(400).json({ error: "No users with FCM tokens found." });
+    }
+
+    // FCM allows up to 500 tokens per multicast message
+    const chunkSize = 500;
+    const results = [];
+    for (let i = 0; i < tokens.length; i += chunkSize) {
+      const chunk = tokens.slice(i, i + chunkSize);
+      const randomGif = getRandomImage();
+      const message = {
+        notification: {
+          title: "Get back on track with your habits!",
+          body: "Consistency is key. Never undermine the power of small daily actions.",
+          image: randomGif
+        },
+        tokens: chunk.map(t => t.token),
+      };
+
+      try {
+        const response = await fcm.sendEachForMulticast(message);
+        response.responses.forEach((resp, idx) => {
+          if (!resp.success) {
+            failedUsers.push(chunk[idx].userId);
+          }
+        });
+        results.push(response);
+      } catch (err) {
+        chunk.forEach(t => failedUsers.push(t.userId));
+        results.push({ error: err.message });
+      }
+    }
+
+    res.json({
+      success: true,
+      message: "Notifications attempted for all users.",
+      failedUsers,
+      results,
+    });
+  } catch (error) {
+    console.error("Error sending notifications to all users:", error);
     res.status(500).json({ error: error.message });
   }
 });
